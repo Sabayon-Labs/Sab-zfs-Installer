@@ -1,3 +1,6 @@
+Sabayon at present has no ZFS installer 
+But to build me a server this doc is only temporary and hear for REFRENCE to furthe ease script/s creation. 
+
 This tutorial will show you how to install Funtoo on ZFS (rootfs). This tutorial is meant to be an "overlay" over the [Regular Funtoo Installation](http://www.funtoo.org/Funtoo_Linux_Installation "Funtoo Linux Installation"). Follow the normal installation and only use this guide for steps 2, 3, and 8.
 
 ### Introduction to ZFS

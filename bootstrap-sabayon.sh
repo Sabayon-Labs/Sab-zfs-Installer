@@ -11,7 +11,11 @@ setup_lang() {
 
 setup_system() {
     ln -sf ../usr/share/zoneinfo/America/Los_Angeles /etc/localtime
-    echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 8.8.8.8
+8.8.4.4 
+2001:4860:4860::8888
+2001:4860:4860::8844 " > /etc/resolv.conf  
+#adds google public dns includes 2 IPv6
 
     # sets python 2.7 as default
     eselect python set 1

@@ -37,7 +37,7 @@ wget 'ftp://gentoo.osuosl.org/pub/gentoo/releases/amd64/autobuilds/current-stage
 
 # Extract stage3
 tar -xvjpf stage3-amd64-*.tar.bz2 -C /mnt/gentoo
-git clone git://git.code.sf.net/p/zfsmanager/code zfsmanager-code /mnt/gentoo/user/src/zfsmanager
+git clone git://git.code.sf.net/p/zfsmanager/code zfsmanager-code >> /mnt/gentoo/user/src/zfsmanager
 # Copy zpool.cache into chroot
 mkdir -p /mnt/gentoo/etc/zfs
 cp /tmp/zpool.cache /mnt/gentoo/etc/zfs/zpool.cache

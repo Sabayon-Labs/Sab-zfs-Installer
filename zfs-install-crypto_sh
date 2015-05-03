@@ -1,0 +1,111 @@
+## https://blog.mthode.org/posts/2013/Apr/gentoo-hardened-zfs-rootfs-with-dm-cryptluks-stable-edition/
+Gentoo Hardened ZFS rootfs with dm-crypt/luks stable edition
+2013 April 03 Wed
+By Matthew Thode (prometheanfire)
+In Gentoo.
+tags: zfsgentooencryption
+Disclaimer
+
+Keep in mind that ZFS on Linux is supported upstream, for differing values of support
+I do not care much for hibernate, normal suspending works.
+This is for a laptop/desktop, so I choose multilib.
+If you patch the kernel to add in ZFS support directly, you cannot share the binary, the cddl and gpl2 are not compatible in that way.
+Initialization
+
+Make sure your installation media supports zfs on linux and installing whatever bootloader is required (uefi needs media that supports it as well). I uploaded an iso that works for me at this link Live DVDs newer then 12.1 should also have support, but the previous link has the stable version of zfsonlinux. If you need to install the bootloader via uefi, you can use one of the latest Fedora CDs, though the gentoo media should be getting support 'soon'. You can install your system normally up until the formatting begins.
+
+Formatting
+
+I will be assuming the following.
+
+/boot on /dev/sda1
+cryptroot on /dev/sda2
+swap inside cryptroot OR not used.
+When using GPT for partitioning, create the first partition at 1M, just to make sure you are on a sector boundry Most newer drives are 4k advanced format drives. Because of this you need ashift=12, some/most newer SSDs need ashift=13 compression set to lz4 will make your system incompatible with upstream (oracle) zfs, if you want to stay compatible then just set compression=on
+
+General Setup
+
+#setup encrypted partition
+cryptsetup luksFormat -l 512 -c aes-xts-plain64 -h sha512 /dev/sda2
+cryptsetup luksOpen /dev/sda2 cryptroot
+
+#setup ZFS
+zpool create -f -o ashift=12 -o cachefile=/tmp/zpool.cache -O normalization=formD -m none -R /mnt/gentoo rpool /dev/mapper/cryptroot
+zfs create -o mountpoint=none -o compression=lz4 rpool/ROOT
+#rootfs
+zfs create -o mountpoint=/ rpool/ROOT/rootfs
+zfs create -o mountpoint=/opt rpool/ROOT/rootfs/OPT
+zfs create -o mountpoint=/usr rpool/ROOT/rootfs/USR
+zfs create -o mountpoint=/var rpool/ROOT/rootfs/VAR
+#portage
+zfs create -o mountpoint=none rpool/GENTOO
+zfs create -o mountpoint=/usr/portage rpool/GENTOO/portage
+zfs create -o mountpoint=/usr/portage/distfiles -o compression=off rpool/GENTOO/distfiles
+zfs create -o mountpoint=/usr/portage/packages -o compression=off rpool/GENTOO/packages
+#homedirs
+zfs create -o mountpoint=/home rpool/HOME
+zfs create -o mountpoint=/root rpool/HOME/root
+
+cd /mnt/gentoo
+
+#Download the latest stage3 and extract it.
+wget ftp://gentoo.osuosl.org/pub/gentoo/releases/amd64/autobuilds/current-stage3-amd64-hardened/stage3-amd64-hardened-*.tar.bz2
+tar -xf /mnt/gentoo/stage3-amd64-hardened-*.tar.bz2 -C /mnt/gentoo
+
+#get the latest portage tree
+emerge --sync
+
+#copy the zfs cache from the live system to the chroot
+mkdir -p /mnt/gentoo/etc/zfs
+cp /tmp/zpool.cache /mnt/gentoo/etc/zfs/zpool.cache
+Kernel Config
+
+If you are compiling the modules into the kernel staticly, then keep these things in mind.
+
+When configuring the kernel, make sure that CONFIG_SPL and CONFIG_ZFS are set to 'Y'.
+Portage will want to install sys-kernel/spl when emerge sys-fs/zfs is run because of dependencies. Also, sys-kernel/spl is still necessary to make the sys-fs/zfs configure script happy.
+You do not need to run or install module-rebuild.
+There have been some updates to the kernel/userspace ioctl since 0.6.0-rc9 was tagged.
+An issue occurs if newer userland utilities are used with older kernel modules.
+Install as normal up until the kernel install.
+
+echo "=sys-kernel/genkernel-3.4.40 ~amd64       #needed for zfs and encryption support" >> /etc/portage/package.accept_keywords
+emerge sys-kernel/genkernel
+emerge sys-kernel/gentoo-sources                #or hardned-sources
+
+#patch the kernel
+
+#If you want to build the modules into the kernel directly, you will need to patch the kernel directly.  Otherwise, skip the patch commands.
+env EXTRA_ECONF='--enable-linux-builtin' ebuild /usr/portage/sys-kernel/spl/spl-0.6.1.ebuild clean configure
+(cd /var/tmp/portage/sys-kernel/spl-0.6.1/work/spl-0.6.1 && ./copy-builtin /usr/src/linux)
+env EXTRA_ECONF='--with-spl=/usr/src/linux --enable-linux-builtin' ebuild /usr/portage/sys-fs/zfs-kmod/zfs-kmod-0.6.1.ebuild clean configure
+(cd /var/tmp/portage/sys-fs/zfs-kmod-0.6.1/work/zfs-zfs-0.6.1/ && ./copy-builtin /usr/src/linux)
+mkdir -p /etc/portage/profile
+echo 'sys-fs/zfs -kernel-builtin' >> /etc/portage/profile/package.use.mask
+echo 'sys-fs/zfs kernel-builtin' >> /etc/portage/package.use
+
+#finish configuring, building and installing the kernel making sure to enable dm-crypt support
+
+#if not building zfs into the kernel, install module-rebuild
+emerge module-rebuild
+
+#install SPL and ZFS stuff zfs pulls in spl automatically
+mkdir -p /etc/portage/profile                                                   
+echo 'sys-fs/zfs -kernel-builtin' >> /etc/portage/profile/package.use.mask      
+echo 'sys-fs/zfs kernel-builtin' >> /etc/portage/package.use                    
+emerge sys-fs/zfs
+
+# Add zfs to the correct runlevels
+rc-update add zfs boot
+rc-update add zfs-shutdown shutdown
+
+#initrd creation, add '--callback="module-rebuild rebuild"' to the options if not building the modules into the kernel
+genkernel --luks --zfs --disklabel initramfs
+Finish installing as normal, your kernel line should look like this, and you should also have a the initrd defined.
+
+#kernel line for grub2, libzfs support is not needed in grub2 because you are not mounting the filesystem directly.
+linux  /kernel-3.5.0-gentoo real_root=ZFS=rpool/ROOT/rootfs crypt_root=/dev/sda2 dozfs=force ro
+initrd /initramfs-genkernel-x86_64-3.5.0
+In /etc/fstab, make sure BOOT, ROOT and SWAP lines are commented out and finish the install.
+
+You should now have a working encryped zfs install.
